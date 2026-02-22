@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import type { GameState, MinigameDef } from '@hearty-party/shared';
+import type { GameState } from '@hearty-party/shared';
 import type { GameSocket } from '../hooks/useSocket.js';
+import type { MinigameStartData } from '../hooks/useGameState.js';
 import { HeartCatcherGame } from '../minigames/HeartCatcherGame.js';
 import { LoveLetterScrambleGame } from '../minigames/LoveLetterScrambleGame.js';
 import { SweetNothingsGame } from '../minigames/SweetNothingsGame.js';
@@ -14,33 +15,26 @@ interface MinigameScreenProps {
   socket: GameSocket;
   gameState: GameState;
   playerId: string;
+  minigameStartData: MinigameStartData | null;
 }
 
-export function MinigameScreen({ socket, gameState, playerId }: MinigameScreenProps) {
-  const [minigameDef, setMinigameDef] = useState<MinigameDef | null>(null);
-  const [timeRemaining, setTimeRemaining] = useState(0);
+export function MinigameScreen({ socket, gameState, playerId, minigameStartData }: MinigameScreenProps) {
+  const [timeRemaining, setTimeRemaining] = useState(minigameStartData?.duration ?? 0);
   const [sharedState, setSharedState] = useState<unknown>(null);
 
   useEffect(() => {
-    const onStart = ({ minigame, duration }: { minigame: MinigameDef; duration: number }) => {
-      setMinigameDef(minigame);
-      setTimeRemaining(duration);
-    };
-
     const onTick = ({ timeRemaining: tr, sharedState: ss }: { timeRemaining: number; sharedState: unknown }) => {
       setTimeRemaining(tr);
       setSharedState(ss);
     };
 
-    socket.on('minigame:start', onStart);
     socket.on('minigame:tick', onTick);
     return () => {
-      socket.off('minigame:start', onStart);
       socket.off('minigame:tick', onTick);
     };
   }, [socket]);
 
-  if (!minigameDef) {
+  if (!minigameStartData) {
     return (
       <div style={styles.loading}>
         <p>Loading minigame...</p>
@@ -48,38 +42,39 @@ export function MinigameScreen({ socket, gameState, playerId }: MinigameScreenPr
     );
   }
 
+  const { minigame } = minigameStartData;
   const timerSeconds = Math.ceil(timeRemaining / 1000);
 
   return (
     <div style={styles.container}>
       <div style={styles.header}>
-        <span style={styles.gameName}>{minigameDef.name}</span>
+        <span style={styles.gameName}>{minigame.name}</span>
         <span style={styles.timer}>{timerSeconds}s</span>
       </div>
 
       <div style={styles.gameArea}>
-        {minigameDef.id === 'heart_catcher' && (
+        {minigame.id === 'heart_catcher' && (
           <HeartCatcherGame socket={socket} playerId={playerId} sharedState={sharedState} />
         )}
-        {minigameDef.id === 'love_letter_scramble' && (
+        {minigame.id === 'love_letter_scramble' && (
           <LoveLetterScrambleGame socket={socket} playerId={playerId} sharedState={sharedState} />
         )}
-        {minigameDef.id === 'sweet_nothings' && (
+        {minigame.id === 'sweet_nothings' && (
           <SweetNothingsGame socket={socket} playerId={playerId} sharedState={sharedState} />
         )}
-        {minigameDef.id === 'perfect_match' && (
+        {minigame.id === 'perfect_match' && (
           <PerfectMatchGame socket={socket} playerId={playerId} sharedState={sharedState} />
         )}
-        {minigameDef.id === 'dance_floor' && (
+        {minigame.id === 'dance_floor' && (
           <DanceFloorGame socket={socket} playerId={playerId} sharedState={sharedState} />
         )}
-        {minigameDef.id === 'gift_wrap_race' && (
+        {minigame.id === 'gift_wrap_race' && (
           <GiftWrapRaceGame socket={socket} playerId={playerId} sharedState={sharedState} />
         )}
-        {minigameDef.id === 'compatibility_quiz' && (
+        {minigame.id === 'compatibility_quiz' && (
           <CompatibilityQuizGame socket={socket} playerId={playerId} sharedState={sharedState} />
         )}
-        {minigameDef.id === 'rose_garden' && (
+        {minigame.id === 'rose_garden' && (
           <RoseGardenGame socket={socket} playerId={playerId} sharedState={sharedState} />
         )}
       </div>

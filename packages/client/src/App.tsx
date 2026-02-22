@@ -9,7 +9,7 @@ import { ResultsScreen } from './screens/ResultsScreen.js';
 
 export function App() {
   const { socket, connected } = useSocket();
-  const { screen, roomState, gameState, playerId, error, confession, clearError } = useGameState(socket);
+  const { screen, roomState, gameState, playerId, error, confession, minigameStartData, clearError } = useGameState(socket);
 
   if (!socket || !connected) {
     return (
@@ -43,7 +43,7 @@ export function App() {
       return <Landing socket={socket} error={error} clearError={clearError} />;
     case 'minigame':
       if (gameState && playerId) {
-        return <MinigameScreen socket={socket} gameState={gameState} playerId={playerId} />;
+        return <MinigameScreen socket={socket} gameState={gameState} playerId={playerId} minigameStartData={minigameStartData} />;
       }
       return <Landing socket={socket} error={error} clearError={clearError} />;
     case 'results':

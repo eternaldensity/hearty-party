@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { GameState, GamePhase, RoomState } from '@hearty-party/shared';
+import type { GameState, GamePhase, MinigameDef, RoomState } from '@hearty-party/shared';
 import type { GameSocket } from './useSocket.js';
 
 export type Screen = 'landing' | 'lobby' | 'board' | 'minigame' | 'results' | 'game_over';
@@ -9,6 +9,11 @@ export interface ConfessionData {
   characterName: string;
 }
 
+export interface MinigameStartData {
+  minigame: MinigameDef;
+  duration: number;
+}
+
 interface UseGameStateReturn {
   screen: Screen;
   roomState: RoomState | null;
@@ -16,6 +21,7 @@ interface UseGameStateReturn {
   playerId: string | null;
   error: string | null;
   confession: ConfessionData | null;
+  minigameStartData: MinigameStartData | null;
   clearError: () => void;
 }
 
@@ -40,6 +46,7 @@ export function useGameState(socket: GameSocket | null): UseGameStateReturn {
   const [playerId, setPlayerId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confession, setConfession] = useState<ConfessionData | null>(null);
+  const [minigameStartData, setMinigameStartData] = useState<MinigameStartData | null>(null);
 
   const clearError = useCallback(() => setError(null), []);
 
@@ -87,8 +94,16 @@ export function useGameState(socket: GameSocket | null): UseGameStateReturn {
       setError(message);
     };
 
+    const onMinigameStart = (data: MinigameStartData) => {
+      setMinigameStartData(data);
+    };
+
     const onStateUpdate = ({ phase, roundNumber, gameState: gs }: { phase: GamePhase; roundNumber: number; gameState: GameState }) => {
       setGameState(gs);
+      // Clear minigame data when leaving minigame phases
+      if (phase !== 'minigame_intro' && phase !== 'minigame_play') {
+        setMinigameStartData(null);
+      }
       const newScreen = PHASE_TO_SCREEN[phase];
       if (newScreen) {
         setScreen(newScreen);
@@ -107,6 +122,7 @@ export function useGameState(socket: GameSocket | null): UseGameStateReturn {
     socket.on('room:error', onError);
     socket.on('game:state-update', onStateUpdate);
     socket.on('game:over', onGameOver);
+    socket.on('minigame:start', onMinigameStart);
 
     return () => {
       socket.off('room:created', onCreated);
@@ -116,8 +132,9 @@ export function useGameState(socket: GameSocket | null): UseGameStateReturn {
       socket.off('room:error', onError);
       socket.off('game:state-update', onStateUpdate);
       socket.off('game:over', onGameOver);
+      socket.off('minigame:start', onMinigameStart);
     };
   }, [socket]);
 
-  return { screen, roomState, gameState, playerId, error, confession, clearError };
+  return { screen, roomState, gameState, playerId, error, confession, minigameStartData, clearError };
 }
