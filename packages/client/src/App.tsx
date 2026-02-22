@@ -1,5 +1,6 @@
 import { useSocket } from './hooks/useSocket.js';
 import { useGameState } from './hooks/useGameState.js';
+import { useGameEvents } from './hooks/useGameEvents.js';
 import { Landing } from './screens/Landing.js';
 import { Lobby } from './screens/Lobby.js';
 import { Board } from './screens/Board.js';
@@ -9,7 +10,8 @@ import { ResultsScreen } from './screens/ResultsScreen.js';
 
 export function App() {
   const { socket, connected } = useSocket();
-  const { screen, roomState, gameState, playerId, error, confession, minigameStartData, minigameEndData, clearError } = useGameState(socket);
+  const { screen, roomState, gameState, playerId, error, confession, clearError } = useGameState(socket);
+  const events = useGameEvents(socket, gameState?.phase);
 
   if (!socket || !connected) {
     return (
@@ -38,17 +40,38 @@ export function App() {
       return <Landing socket={socket} error={error} clearError={clearError} />;
     case 'board':
       if (gameState && playerId) {
-        return <Board socket={socket} gameState={gameState} playerId={playerId} />;
+        return (
+          <Board
+            socket={socket}
+            gameState={gameState}
+            playerId={playerId}
+            movingData={events.movingData}
+            dialoguePrompt={events.dialoguePrompt}
+            shopData={events.shopData}
+            minigameStartData={events.minigameStartData}
+            spaceEvents={events.spaceEvents}
+            clearDialogue={events.clearDialogue}
+            clearShop={events.clearShop}
+          />
+        );
       }
       return <Landing socket={socket} error={error} clearError={clearError} />;
     case 'minigame':
       if (gameState && playerId) {
-        return <MinigameScreen socket={socket} gameState={gameState} playerId={playerId} minigameStartData={minigameStartData} />;
+        return (
+          <MinigameScreen
+            socket={socket}
+            gameState={gameState}
+            playerId={playerId}
+            minigameStartData={events.minigameStartData}
+            minigameTick={events.minigameTick}
+          />
+        );
       }
       return <Landing socket={socket} error={error} clearError={clearError} />;
     case 'results':
       if (gameState && playerId) {
-        return <ResultsScreen socket={socket} gameState={gameState} playerId={playerId} minigameEndData={minigameEndData} />;
+        return <ResultsScreen socket={socket} gameState={gameState} playerId={playerId} minigameEndData={events.minigameEndData} />;
       }
       return <Landing socket={socket} error={error} clearError={clearError} />;
     case 'game_over':

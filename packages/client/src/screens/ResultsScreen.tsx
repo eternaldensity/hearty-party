@@ -1,6 +1,6 @@
 import type { GameState } from '@hearty-party/shared';
 import type { GameSocket } from '../hooks/useSocket.js';
-import type { MinigameEndData } from '../hooks/useGameState.js';
+import type { MinigameEndData } from '../hooks/useGameEvents.js';
 
 interface ResultsScreenProps {
   socket: GameSocket;

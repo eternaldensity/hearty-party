@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react';
 import type { GameState } from '@hearty-party/shared';
 import type { GameSocket } from '../hooks/useSocket.js';
-import type { MinigameStartData } from '../hooks/useGameState.js';
+import type { MinigameStartData, MinigameTickData } from '../hooks/useGameEvents.js';
 import { HeartCatcherGame } from '../minigames/HeartCatcherGame.js';
 import { LoveLetterScrambleGame } from '../minigames/LoveLetterScrambleGame.js';
 import { SweetNothingsGame } from '../minigames/SweetNothingsGame.js';
@@ -16,24 +15,10 @@ interface MinigameScreenProps {
   gameState: GameState;
   playerId: string;
   minigameStartData: MinigameStartData | null;
+  minigameTick: MinigameTickData | null;
 }
 
-export function MinigameScreen({ socket, gameState, playerId, minigameStartData }: MinigameScreenProps) {
-  const [timeRemaining, setTimeRemaining] = useState(minigameStartData?.duration ?? 0);
-  const [sharedState, setSharedState] = useState<unknown>(null);
-
-  useEffect(() => {
-    const onTick = ({ timeRemaining: tr, sharedState: ss }: { timeRemaining: number; sharedState: unknown }) => {
-      setTimeRemaining(tr);
-      setSharedState(ss);
-    };
-
-    socket.on('minigame:tick', onTick);
-    return () => {
-      socket.off('minigame:tick', onTick);
-    };
-  }, [socket]);
-
+export function MinigameScreen({ socket, gameState, playerId, minigameStartData, minigameTick }: MinigameScreenProps) {
   if (!minigameStartData) {
     return (
       <div style={styles.loading}>
@@ -43,6 +28,8 @@ export function MinigameScreen({ socket, gameState, playerId, minigameStartData 
   }
 
   const { minigame } = minigameStartData;
+  const timeRemaining = minigameTick?.timeRemaining ?? minigameStartData.duration;
+  const sharedState = minigameTick?.sharedState ?? null;
   const timerSeconds = Math.ceil(timeRemaining / 1000);
 
   return (

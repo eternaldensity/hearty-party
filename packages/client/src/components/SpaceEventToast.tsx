@@ -1,6 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
 import { SPACE_COLORS, CHARACTERS } from '@hearty-party/shared';
-import type { GameSocket } from '../hooks/useSocket.js';
+import type { SpaceEvent } from '../hooks/useGameEvents.js';
 
 interface SpaceEventPayload {
   description?: string;
@@ -12,50 +11,22 @@ interface SpaceEventPayload {
   [key: string]: unknown;
 }
 
-interface SpaceEventData {
-  playerId: string;
-  spaceType: string;
-  eventData: SpaceEventPayload | null;
-}
-
 interface SpaceEventToastProps {
-  socket: GameSocket;
+  events: SpaceEvent[];
   playerNames: Map<string, string>;
 }
 
-export function SpaceEventToast({ socket, playerNames }: SpaceEventToastProps) {
-  const [events, setEvents] = useState<Array<SpaceEventData & { id: number }>>([]);
-  const counterRef = useRef(0);
-
-  useEffect(() => {
-    const onEvent = (raw: { playerId: string; spaceType: string; eventData: unknown }) => {
-      const data: SpaceEventData = {
-        playerId: raw.playerId,
-        spaceType: raw.spaceType,
-        eventData: (raw.eventData as SpaceEventPayload | null) ?? null,
-      };
-      const id = counterRef.current++;
-      setEvents((prev) => [...prev.slice(-4), { ...data, id }]);
-
-      // Auto-dismiss after 3s
-      setTimeout(() => {
-        setEvents((prev) => prev.filter((e) => e.id !== id));
-      }, 3000);
-    };
-
-    socket.on('game:space-event', onEvent);
-    return () => { socket.off('game:space-event', onEvent); };
-  }, [socket]);
-
+export function SpaceEventToast({ events, playerNames }: SpaceEventToastProps) {
   if (events.length === 0) return null;
 
   return (
     <div style={styles.container}>
       {events.map((evt) => {
+        const eventData = (evt.eventData as SpaceEventPayload | null) ?? null;
         const color = SPACE_COLORS[evt.spaceType] ?? '#9CA3AF';
-        const desc = evt.eventData?.description ?? `${playerNames.get(evt.playerId) ?? 'Someone'} landed on a ${evt.spaceType} space`;
-        const character = evt.eventData?.characterId
-          ? CHARACTERS.find((c) => c.id === evt.eventData?.characterId)
+        const desc = eventData?.description ?? `${playerNames.get(evt.playerId) ?? 'Someone'} landed on a ${evt.spaceType} space`;
+        const character = eventData?.characterId
+          ? CHARACTERS.find((c) => c.id === eventData?.characterId)
           : undefined;
 
         return (
@@ -67,20 +38,20 @@ export function SpaceEventToast({ socket, playerNames }: SpaceEventToastProps) {
             }}
           >
             <p style={styles.desc}>{desc}</p>
-            {evt.eventData?.affectionChange !== undefined && evt.eventData.affectionChange !== 0 && (
+            {eventData?.affectionChange !== undefined && eventData.affectionChange !== 0 && (
               <span
                 style={{
                   ...styles.change,
-                  color: evt.eventData.affectionChange > 0 ? '#34D399' : '#F87171',
+                  color: eventData.affectionChange > 0 ? '#34D399' : '#F87171',
                 }}
               >
-                {evt.eventData.affectionChange > 0 ? '+' : ''}{evt.eventData.affectionChange}
+                {eventData.affectionChange > 0 ? '+' : ''}{eventData.affectionChange}
                 {character ? ` with ${character.name}` : ''}
               </span>
             )}
-            {evt.eventData?.tokenChange !== undefined && evt.eventData.tokenChange !== 0 && (
+            {eventData?.tokenChange !== undefined && eventData.tokenChange !== 0 && (
               <span style={{ ...styles.change, color: '#FBBF24' }}>
-                {evt.eventData.tokenChange > 0 ? '+' : ''}{evt.eventData.tokenChange} tokens
+                {eventData.tokenChange > 0 ? '+' : ''}{eventData.tokenChange} tokens
               </span>
             )}
           </div>

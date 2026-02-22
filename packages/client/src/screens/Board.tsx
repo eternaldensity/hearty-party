@@ -1,7 +1,8 @@
 import { useEffect, useState, useMemo } from 'react';
-import type { GameState, PlayerState, GamePhase, DialoguePrompt, ItemDef, MinigameDef } from '@hearty-party/shared';
+import type { GameState, PlayerState, GamePhase, DialoguePrompt, MinigameDef } from '@hearty-party/shared';
 import { SPACE_COLORS, BOARD_SIZE } from '@hearty-party/shared';
 import type { GameSocket } from '../hooks/useSocket.js';
+import type { MovingData, ShopData, MinigameStartData, SpaceEvent } from '../hooks/useGameEvents.js';
 import { BoardSpace } from '../components/BoardSpace.js';
 import { DiceRoll } from '../components/DiceRoll.js';
 import { AffectionMeter } from '../components/AffectionMeter.js';
@@ -13,6 +14,13 @@ interface BoardProps {
   socket: GameSocket;
   gameState: GameState;
   playerId: string;
+  movingData: MovingData | null;
+  dialoguePrompt: DialoguePrompt | null;
+  shopData: ShopData | null;
+  minigameStartData: MinigameStartData | null;
+  spaceEvents: SpaceEvent[];
+  clearDialogue: () => void;
+  clearShop: () => void;
 }
 
 const PHASE_LABELS: Partial<Record<GamePhase, string>> = {
@@ -30,13 +38,9 @@ const PLAYER_COLORS = [
   '#A78BFA', '#FB923C', '#2DD4BF', '#F472B6',
 ];
 
-export function Board({ socket, gameState, playerId }: BoardProps) {
-  const [movingPlayerId, setMovingPlayerId] = useState<string | null>(null);
-  const [movingPath, setMovingPath] = useState<number[]>([]);
+export function Board({ socket, gameState, playerId, movingData, dialoguePrompt, shopData, minigameStartData, spaceEvents, clearDialogue, clearShop }: BoardProps) {
   const [animPos, setAnimPos] = useState<number | null>(null);
-  const [dialoguePrompt, setDialoguePrompt] = useState<DialoguePrompt | null>(null);
-  const [shopData, setShopData] = useState<{ items: ItemDef[]; playerTokens: number } | null>(null);
-  const [minigameIntro, setMinigameIntro] = useState<MinigameDef | null>(null);
+  const [movingPlayerId, setMovingPlayerId] = useState<string | null>(null);
 
   const myPlayer = gameState.players.find((p) => p.id === playerId);
   const activePlayer = gameState.players[gameState.activePlayerIndex];
@@ -50,76 +54,31 @@ export function Board({ socket, gameState, playerId }: BoardProps) {
     return map;
   }, [gameState.players]);
 
-  // Listen for movement animation events
+  // Animate movement when movingData arrives
   useEffect(() => {
-    const onMoving = ({ playerId: pid, path, finalSpace }: { playerId: string; path: number[]; finalSpace: number }) => {
-      setMovingPlayerId(pid);
-      setMovingPath(path);
-      // Animate step by step
-      let step = 0;
-      const interval = setInterval(() => {
-        step++;
-        if (step < path.length) {
-          setAnimPos(path[step]);
-        } else {
-          clearInterval(interval);
-          setAnimPos(null);
-          setMovingPlayerId(null);
-          setMovingPath([]);
-        }
-      }, 300);
-    };
-
-    socket.on('game:player-moving', onMoving);
-    return () => { socket.off('game:player-moving', onMoving); };
-  }, [socket]);
-
-  // Listen for dice results
-  useEffect(() => {
-    const onDice = ({ rolls }: { rolls: Array<{ playerId: string; value: number }> }) => {
-      // The gameState update from server will reflect the rolls
-    };
-    socket.on('game:dice-results', onDice);
-    return () => { socket.off('game:dice-results', onDice); };
-  }, [socket]);
-
-  // Listen for dialogue prompts
-  useEffect(() => {
-    const onDialogue = ({ prompt }: { prompt: DialoguePrompt }) => {
-      setDialoguePrompt(prompt);
-    };
-    socket.on('game:dialogue', onDialogue);
-    return () => { socket.off('game:dialogue', onDialogue); };
-  }, [socket]);
-
-  // Listen for shop open
-  useEffect(() => {
-    const onShop = ({ items, playerTokens }: { items: ItemDef[]; playerTokens: number }) => {
-      setShopData({ items, playerTokens });
-    };
-    socket.on('game:shop-open', onShop);
-    return () => { socket.off('game:shop-open', onShop); };
-  }, [socket]);
-
-  // Listen for minigame intro
-  useEffect(() => {
-    const onStart = ({ minigame }: { minigame: MinigameDef; duration: number }) => {
-      setMinigameIntro(minigame);
-    };
-    socket.on('minigame:start', onStart);
-    return () => { socket.off('minigame:start', onStart); };
-  }, [socket]);
-
-  // Clear dialogue/shop overlays when phase changes away from space_phase
-  useEffect(() => {
-    if (gameState.phase !== 'space_phase') {
-      setDialoguePrompt(null);
-      setShopData(null);
+    if (!movingData) {
+      setAnimPos(null);
+      setMovingPlayerId(null);
+      return;
     }
-    if (gameState.phase !== 'minigame_intro') {
-      setMinigameIntro(null);
-    }
-  }, [gameState.phase]);
+
+    setMovingPlayerId(movingData.playerId);
+    let step = 0;
+    const interval = setInterval(() => {
+      step++;
+      if (step < movingData.path.length) {
+        setAnimPos(movingData.path[step]);
+      } else {
+        clearInterval(interval);
+        setAnimPos(null);
+        setMovingPlayerId(null);
+      }
+    }, 300);
+
+    return () => clearInterval(interval);
+  }, [movingData]);
+
+  const minigameIntro = minigameStartData?.minigame ?? null;
 
   // Get effective player position (accounting for animation)
   const getPlayerPosition = (p: PlayerState): number => {
@@ -323,7 +282,7 @@ export function Board({ socket, gameState, playerId }: BoardProps) {
         <DialoguePanel
           socket={socket}
           prompt={dialoguePrompt}
-          onDone={() => setDialoguePrompt(null)}
+          onDone={clearDialogue}
         />
       )}
 
@@ -333,7 +292,7 @@ export function Board({ socket, gameState, playerId }: BoardProps) {
           socket={socket}
           items={shopData.items}
           playerTokens={shopData.playerTokens}
-          onDone={() => setShopData(null)}
+          onDone={clearShop}
         />
       )}
 
@@ -352,8 +311,8 @@ export function Board({ socket, gameState, playerId }: BoardProps) {
         </div>
       )}
 
-      {/* Space event toast notifications (always mounted) */}
-      <SpaceEventToast socket={socket} playerNames={playerNames} />
+      {/* Space event toast notifications */}
+      <SpaceEventToast events={spaceEvents} playerNames={playerNames} />
     </div>
   );
 }
