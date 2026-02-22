@@ -21,6 +21,7 @@ import {
   CHARM_FOUNTAIN_AMOUNT,
   CUTTHROAT_STEAL_AMOUNT,
   CUTTHROAT_JEALOUSY_LOSS,
+  CONFESSION_THRESHOLD,
   getShopItems,
   getRandomDialogue,
   getRandomCharacterDialogue,
@@ -193,6 +194,14 @@ export class GameStateMachine {
       // SPACE_PHASE
       await this.runSpacePhase();
 
+      // Check confession after space events
+      const confessionAfterSpace = this.checkConfession();
+      if (confessionAfterSpace) {
+        this.setPhase('game_over');
+        this.broadcastGameOver(confessionAfterSpace);
+        return;
+      }
+
       // Cutthroat: jealousy mechanic at end of each round
       if (this.state.settings.cutthroatMode) {
         this.applyJealousy();
@@ -200,6 +209,14 @@ export class GameStateMachine {
 
       // MINIGAME phases
       await this.runMinigamePhase();
+
+      // Check confession after minigame rewards
+      const confessionAfterMinigame = this.checkConfession();
+      if (confessionAfterMinigame) {
+        this.setPhase('game_over');
+        this.broadcastGameOver(confessionAfterMinigame);
+        return;
+      }
 
       // ROUND_END
       this.setPhase('round_end');
@@ -659,6 +676,20 @@ export class GameStateMachine {
     await this.delay(2500);
   }
 
+  // ── Confession Win Condition ──
+
+  private checkConfession(): { playerId: string; characterId: string } | null {
+    for (const player of this.state.players) {
+      if (!player.connected) continue;
+      for (const [charId, aff] of Object.entries(player.affection)) {
+        if (aff >= CONFESSION_THRESHOLD) {
+          return { playerId: player.id, characterId: charId };
+        }
+      }
+    }
+    return null;
+  }
+
   // ── Cutthroat: Jealousy ──
 
   private applyJealousy(): void {
@@ -735,7 +766,7 @@ export class GameStateMachine {
     });
   }
 
-  private broadcastGameOver(): void {
+  private broadcastGameOver(confession?: { playerId: string; characterId: string }): void {
     const standings = this.state.players
       .map((p) => ({
         playerId: p.id,
@@ -745,9 +776,25 @@ export class GameStateMachine {
       .sort((a, b) => b.totalAffection - a.totalAffection)
       .map((s, i) => ({ ...s, rank: i + 1 }));
 
+    // If confession win, the confessor is the winner regardless of total affection
+    const winnerId = confession?.playerId ?? standings[0]?.playerId ?? '';
+
+    if (confession) {
+      // Re-rank so the confessor is rank 1
+      const confIdx = standings.findIndex((s) => s.playerId === winnerId);
+      if (confIdx > 0) {
+        const [confessor] = standings.splice(confIdx, 1);
+        standings.unshift(confessor);
+        standings.forEach((s, i) => { s.rank = i + 1; });
+      }
+    }
+
     this.io.to(this.room.code).emit('game:over', {
       finalStandings: standings,
-      winnerId: standings[0]?.playerId ?? '',
+      winnerId,
+      confession: confession
+        ? { characterId: confession.characterId, characterName: getCharacter(confession.characterId)?.name ?? '' }
+        : undefined,
     });
   }
 

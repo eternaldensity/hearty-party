@@ -71,6 +71,34 @@ export const SWEET_NOTHINGS_SPEED_BONUS_MS = 3000;
 export const SWEET_NOTHINGS_FAST_POINTS = 3;
 export const SWEET_NOTHINGS_CORRECT_POINTS = 1;
 
+// ── Minigame: Perfect Match ──
+
+export const PERFECT_MATCH_PAIRS = 8;
+export const PERFECT_MATCH_FLIP_TIMEOUT_MS = 1500;
+
+// ── Minigame: Dance Floor ──
+
+export const DANCE_FLOOR_BEAT_COUNT = 20;
+export const DANCE_FLOOR_BEAT_WINDOW_MS = 1200;
+export const DANCE_FLOOR_BEAT_GAP_MS = 550;
+export const DANCE_FLOOR_HIT_POINTS = 1;
+export const DANCE_FLOOR_COMBO_BONUS = 1;
+
+// ── Minigame: Gift Wrap Race ──
+
+export const GIFT_WRAP_TAPS_TO_WIN = 40;
+
+// ── Minigame: Compatibility Quiz ──
+
+export const COMPAT_QUIZ_ROUND_COUNT = 5;
+export const COMPAT_QUIZ_ROUND_TIME_MS = 10_000;
+
+// ── Minigame: Rose Garden ──
+
+export const ROSE_GARDEN_GRID_SIZE = 6;
+export const ROSE_GARDEN_ROUNDS = 5;
+export const ROSE_GARDEN_PLACE_TIMEOUT_MS = 6000;
+
 // ── Board ──
 
 export const BOARD_SIZE = 30;

@@ -4,6 +4,11 @@ import type { GameSocket } from '../hooks/useSocket.js';
 import { HeartCatcherGame } from '../minigames/HeartCatcherGame.js';
 import { LoveLetterScrambleGame } from '../minigames/LoveLetterScrambleGame.js';
 import { SweetNothingsGame } from '../minigames/SweetNothingsGame.js';
+import { PerfectMatchGame } from '../minigames/PerfectMatchGame.js';
+import { DanceFloorGame } from '../minigames/DanceFloorGame.js';
+import { GiftWrapRaceGame } from '../minigames/GiftWrapRaceGame.js';
+import { CompatibilityQuizGame } from '../minigames/CompatibilityQuizGame.js';
+import { RoseGardenGame } from '../minigames/RoseGardenGame.js';
 
 interface MinigameScreenProps {
   socket: GameSocket;
@@ -61,6 +66,21 @@ export function MinigameScreen({ socket, gameState, playerId }: MinigameScreenPr
         )}
         {minigameDef.id === 'sweet_nothings' && (
           <SweetNothingsGame socket={socket} playerId={playerId} sharedState={sharedState} />
+        )}
+        {minigameDef.id === 'perfect_match' && (
+          <PerfectMatchGame socket={socket} playerId={playerId} sharedState={sharedState} />
+        )}
+        {minigameDef.id === 'dance_floor' && (
+          <DanceFloorGame socket={socket} playerId={playerId} sharedState={sharedState} />
+        )}
+        {minigameDef.id === 'gift_wrap_race' && (
+          <GiftWrapRaceGame socket={socket} playerId={playerId} sharedState={sharedState} />
+        )}
+        {minigameDef.id === 'compatibility_quiz' && (
+          <CompatibilityQuizGame socket={socket} playerId={playerId} sharedState={sharedState} />
+        )}
+        {minigameDef.id === 'rose_garden' && (
+          <RoseGardenGame socket={socket} playerId={playerId} sharedState={sharedState} />
         )}
       </div>
     </div>

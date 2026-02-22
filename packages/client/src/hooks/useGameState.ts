@@ -4,12 +4,18 @@ import type { GameSocket } from './useSocket.js';
 
 export type Screen = 'landing' | 'lobby' | 'board' | 'minigame' | 'results' | 'game_over';
 
+export interface ConfessionData {
+  characterId: string;
+  characterName: string;
+}
+
 interface UseGameStateReturn {
   screen: Screen;
   roomState: RoomState | null;
   gameState: GameState | null;
   playerId: string | null;
   error: string | null;
+  confession: ConfessionData | null;
   clearError: () => void;
 }
 
@@ -33,6 +39,7 @@ export function useGameState(socket: GameSocket | null): UseGameStateReturn {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [playerId, setPlayerId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [confession, setConfession] = useState<ConfessionData | null>(null);
 
   const clearError = useCallback(() => setError(null), []);
 
@@ -88,7 +95,8 @@ export function useGameState(socket: GameSocket | null): UseGameStateReturn {
       }
     };
 
-    const onGameOver = ({ finalStandings, winnerId }: { finalStandings: Array<{ playerId: string; totalAffection: number; rank: number }>; winnerId: string }) => {
+    const onGameOver = ({ finalStandings, winnerId, confession: conf }: { finalStandings: Array<{ playerId: string; totalAffection: number; rank: number }>; winnerId: string; confession?: ConfessionData }) => {
+      setConfession(conf ?? null);
       setScreen('game_over');
     };
 
@@ -111,5 +119,5 @@ export function useGameState(socket: GameSocket | null): UseGameStateReturn {
     };
   }, [socket]);
 
-  return { screen, roomState, gameState, playerId, error, clearError };
+  return { screen, roomState, gameState, playerId, error, confession, clearError };
 }

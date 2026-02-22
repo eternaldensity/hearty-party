@@ -30,6 +30,51 @@ export const MINIGAME_DEFS: MinigameDef[] = [
     minPlayers: 2,
     type: 'trivia',
   },
+  {
+    id: 'perfect_match',
+    name: 'Perfect Match',
+    description: 'Find matching pairs of character icons!',
+    rules: 'Flip cards to find matching pairs. Each pair you find scores a point. Most pairs wins!',
+    duration: 40_000,
+    minPlayers: 2,
+    type: 'strategy',
+  },
+  {
+    id: 'dance_floor',
+    name: 'Dance Floor',
+    description: 'Hit the right moves to the beat!',
+    rules: 'Arrows appear on screen. Tap the matching direction while the beat is active. Accuracy and combos score points!',
+    duration: 35_000,
+    minPlayers: 2,
+    type: 'action',
+  },
+  {
+    id: 'gift_wrap_race',
+    name: 'Gift Wrap Race',
+    description: 'Tap as fast as you can to wrap the gift!',
+    rules: 'Tap the button repeatedly to fill your wrapping bar. First to 100% wins!',
+    duration: 25_000,
+    minPlayers: 2,
+    type: 'action',
+  },
+  {
+    id: 'compatibility_quiz',
+    name: 'Compatibility Quiz',
+    description: 'How well do you know the characters?',
+    rules: '5 personality questions. Pick the answer that matches the target character\'s preferences. Higher preference weight = more points!',
+    duration: 60_000,
+    minPlayers: 2,
+    type: 'trivia',
+  },
+  {
+    id: 'rose_garden',
+    name: 'Rose Garden',
+    description: 'Grow your garden and claim territory!',
+    rules: 'Take turns placing roses on a grid. After each round, your roses spread to empty adjacent cells. Most roses at the end wins!',
+    duration: 45_000,
+    minPlayers: 2,
+    type: 'strategy',
+  },
 ];
 
 export function getMinigameDef(id: string): MinigameDef | undefined {
@@ -78,6 +123,96 @@ export interface QuoteRound {
   correctCharacterId: string;
   options: string[];
 }
+
+// ── Compatibility Quiz: Question Pool ──
+
+export interface QuizQuestion {
+  question: string;
+  options: Array<{ text: string; category: string }>;
+}
+
+export const COMPAT_QUIZ_QUESTIONS: QuizQuestion[] = [
+  {
+    question: 'Your date suggests an activity. What do you pick?',
+    options: [
+      { text: 'A quiet evening reading poetry together', category: 'thoughtful' },
+      { text: 'Skydiving — no hesitation!', category: 'bold' },
+      { text: 'A comedy show to laugh until you cry', category: 'funny' },
+    ],
+  },
+  {
+    question: 'You want to impress someone. How do you do it?',
+    options: [
+      { text: 'Write them a heartfelt letter', category: 'kind' },
+      { text: 'Arrive in a stunning outfit', category: 'flashy' },
+      { text: 'Create a painting or song for them', category: 'creative' },
+    ],
+  },
+  {
+    question: 'A friend is upset. What do you do?',
+    options: [
+      { text: 'Sit with them and listen patiently', category: 'patient' },
+      { text: 'Tell jokes to cheer them up', category: 'funny' },
+      { text: 'Take them on an adventure to forget', category: 'bold' },
+    ],
+  },
+  {
+    question: 'What kind of gift do you give?',
+    options: [
+      { text: 'Something handmade and personal', category: 'creative' },
+      { text: 'The most expensive thing you can find', category: 'flashy' },
+      { text: 'Something practical they mentioned needing', category: 'thoughtful' },
+    ],
+  },
+  {
+    question: 'How do you handle a disagreement?',
+    options: [
+      { text: 'Talk it out calmly and find common ground', category: 'patient' },
+      { text: 'Stand your ground — you know you\'re right', category: 'competitive' },
+      { text: 'Apologize with a kind gesture', category: 'kind' },
+    ],
+  },
+  {
+    question: 'Your ideal weekend looks like:',
+    options: [
+      { text: 'A challenging hike or competition', category: 'competitive' },
+      { text: 'A cozy day baking and sharing with friends', category: 'kind' },
+      { text: 'Visiting a gallery or making art', category: 'creative' },
+    ],
+  },
+  {
+    question: 'At a party, you\'re the one who:',
+    options: [
+      { text: 'Makes a grand, memorable entrance', category: 'flashy' },
+      { text: 'Gets everyone laughing with stories', category: 'funny' },
+      { text: 'Checks on the quiet person in the corner', category: 'thoughtful' },
+    ],
+  },
+  {
+    question: 'Your love language is:',
+    options: [
+      { text: 'Acts of service — doing things to help', category: 'kind' },
+      { text: 'Quality time — just being together, no rush', category: 'patient' },
+      { text: 'Words of affirmation — bold compliments', category: 'bold' },
+    ],
+  },
+  {
+    question: 'Pick a date night movie:',
+    options: [
+      { text: 'An action-packed thriller', category: 'bold' },
+      { text: 'A beautifully animated art film', category: 'creative' },
+      { text: 'A slapstick comedy', category: 'funny' },
+    ],
+  },
+  {
+    question: 'Someone challenges you to a contest. You:',
+    options: [
+      { text: 'Accept immediately — game on!', category: 'competitive' },
+      { text: 'Suggest something creative instead', category: 'creative' },
+      { text: 'Let them win — it\'s just a game', category: 'patient' },
+    ],
+  },
+];
 
 export const SWEET_NOTHINGS_QUOTES: QuoteRound[] = [
   { quote: "Shall I compare thee to a summer's day?", correctCharacterId: 'sable', options: ['sable', 'lux', 'pip'] },

@@ -58,5 +58,5 @@ export interface ServerEvents {
   'minigame:end': (data: { rankings: MinigameRanking[]; rewards: MinigameReward[] }) => void;
 
   'game:round-end': (data: { standings: Array<{ playerId: string; totalAffection: number }>; roundNumber: number }) => void;
-  'game:over': (data: { finalStandings: Array<{ playerId: string; totalAffection: number; rank: number }>; winnerId: string }) => void;
+  'game:over': (data: { finalStandings: Array<{ playerId: string; totalAffection: number; rank: number }>; winnerId: string; confession?: { characterId: string; characterName: string } }) => void;
 }

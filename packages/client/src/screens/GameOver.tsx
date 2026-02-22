@@ -1,9 +1,11 @@
 import type { GameState } from '@hearty-party/shared';
 import { AffectionMeter } from '../components/AffectionMeter.js';
+import type { ConfessionData } from '../hooks/useGameState.js';
 
 interface GameOverProps {
   gameState: GameState;
   playerId: string;
+  confession: ConfessionData | null;
 }
 
 const PLAYER_COLORS = [
@@ -11,7 +13,7 @@ const PLAYER_COLORS = [
   '#A78BFA', '#FB923C', '#2DD4BF', '#F472B6',
 ];
 
-export function GameOver({ gameState, playerId }: GameOverProps) {
+export function GameOver({ gameState, playerId, confession }: GameOverProps) {
   const standings = gameState.players
     .map((p, i) => ({
       ...p,
@@ -25,16 +27,24 @@ export function GameOver({ gameState, playerId }: GameOverProps) {
 
   return (
     <div style={styles.container}>
-      <h1 style={styles.title}>Game Over!</h1>
+      <h1 style={styles.title}>
+        {confession ? 'Confession!' : 'Game Over!'}
+      </h1>
 
       <div style={styles.winnerCard}>
-        <span style={styles.crown}>{'\u{1F451}'}</span>
+        <span style={styles.crown}>{confession ? '\u{1F48C}' : '\u{1F451}'}</span>
         <h2 style={styles.winnerName}>
           {winner?.name}{isWinner ? ' (You!)' : ''} wins!
         </h2>
-        <span style={styles.winnerScore}>
-          {winner?.totalAffection} total affection
-        </span>
+        {confession ? (
+          <span style={styles.winnerScore}>
+            Confessed their love to {confession.characterName}!
+          </span>
+        ) : (
+          <span style={styles.winnerScore}>
+            {winner?.totalAffection} total affection
+          </span>
+        )}
       </div>
 
       <div style={styles.rankingList}>

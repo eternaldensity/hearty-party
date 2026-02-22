@@ -194,6 +194,76 @@ export interface SweetNothingsTickState {
   scores: Record<string, number>;
 }
 
+// ── Perfect Match Tick State ──
+
+export interface PerfectMatchCard {
+  id: number;
+  characterId: string;
+  flipped: boolean;
+  matched: boolean;
+}
+
+export interface PerfectMatchTickState {
+  cards: PerfectMatchCard[];
+  scores: Record<string, number>;
+  currentFlipped: number[];  // indices of currently flipped (unmatched) cards
+  lastMatchBy: string | null;
+}
+
+// ── Dance Floor Tick State ──
+
+export type DanceDirection = 'up' | 'down' | 'left' | 'right';
+
+export interface DanceFloorTickState {
+  currentDirection: DanceDirection;
+  beatIndex: number;
+  totalBeats: number;
+  beatActive: boolean;    // true while the current beat is accepting input
+  scores: Record<string, number>;
+  combos: Record<string, number>;
+}
+
+// ── Gift Wrap Race Tick State ──
+
+export interface GiftWrapRaceTickState {
+  progress: Record<string, number>;   // 0-100 per player
+  finished: Record<string, boolean>;
+  tapCounts: Record<string, number>;
+}
+
+// ── Compatibility Quiz Tick State ──
+
+export interface CompatibilityQuizQuestion {
+  question: string;
+  options: Array<{ text: string; category: string }>;
+}
+
+export interface CompatibilityQuizTickState {
+  roundIndex: number;
+  totalRounds: number;
+  question: CompatibilityQuizQuestion;
+  targetCharacterId: string;
+  targetCharacterName: string;
+  roundAnswered: boolean;
+  scores: Record<string, number>;
+}
+
+// ── Rose Garden Tick State ──
+
+export interface RoseGardenCell {
+  owner: string | null;  // playerId or null
+}
+
+export interface RoseGardenTickState {
+  grid: RoseGardenCell[][];
+  gridSize: number;
+  roundIndex: number;
+  totalRounds: number;
+  currentPlayerId: string | null;
+  scores: Record<string, number>;
+  placed: Record<string, boolean>;  // who has placed this round
+}
+
 // ── Dialogue ──
 
 export interface DialogueChoice {
