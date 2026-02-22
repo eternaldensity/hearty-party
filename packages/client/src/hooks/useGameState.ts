@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { RoomState } from '@hearty-party/shared';
+import type { GameState, GamePhase, RoomState } from '@hearty-party/shared';
 import type { GameSocket } from './useSocket.js';
 
 export type Screen = 'landing' | 'lobby' | 'board' | 'minigame' | 'results' | 'game_over';
@@ -7,14 +7,30 @@ export type Screen = 'landing' | 'lobby' | 'board' | 'minigame' | 'results' | 'g
 interface UseGameStateReturn {
   screen: Screen;
   roomState: RoomState | null;
+  gameState: GameState | null;
   playerId: string | null;
   error: string | null;
   clearError: () => void;
 }
 
+const PHASE_TO_SCREEN: Partial<Record<GamePhase, Screen>> = {
+  lobby: 'lobby',
+  game_start: 'board',
+  round_start: 'board',
+  dice_phase: 'board',
+  move_phase: 'board',
+  space_phase: 'board',
+  minigame_intro: 'board',
+  minigame_play: 'minigame',
+  minigame_results: 'results',
+  round_end: 'board',
+  game_over: 'game_over',
+};
+
 export function useGameState(socket: GameSocket | null): UseGameStateReturn {
   const [screen, setScreen] = useState<Screen>('landing');
   const [roomState, setRoomState] = useState<RoomState | null>(null);
+  const [gameState, setGameState] = useState<GameState | null>(null);
   const [playerId, setPlayerId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -64,11 +80,25 @@ export function useGameState(socket: GameSocket | null): UseGameStateReturn {
       setError(message);
     };
 
+    const onStateUpdate = ({ phase, roundNumber, gameState: gs }: { phase: GamePhase; roundNumber: number; gameState: GameState }) => {
+      setGameState(gs);
+      const newScreen = PHASE_TO_SCREEN[phase];
+      if (newScreen) {
+        setScreen(newScreen);
+      }
+    };
+
+    const onGameOver = ({ finalStandings, winnerId }: { finalStandings: Array<{ playerId: string; totalAffection: number; rank: number }>; winnerId: string }) => {
+      setScreen('game_over');
+    };
+
     socket.on('room:created', onCreated);
     socket.on('room:joined', onJoined);
     socket.on('room:player-joined', onPlayerJoined);
     socket.on('room:player-left', onPlayerLeft);
     socket.on('room:error', onError);
+    socket.on('game:state-update', onStateUpdate);
+    socket.on('game:over', onGameOver);
 
     return () => {
       socket.off('room:created', onCreated);
@@ -76,8 +106,10 @@ export function useGameState(socket: GameSocket | null): UseGameStateReturn {
       socket.off('room:player-joined', onPlayerJoined);
       socket.off('room:player-left', onPlayerLeft);
       socket.off('room:error', onError);
+      socket.off('game:state-update', onStateUpdate);
+      socket.off('game:over', onGameOver);
     };
   }, [socket]);
 
-  return { screen, roomState, playerId, error, clearError };
+  return { screen, roomState, gameState, playerId, error, clearError };
 }

@@ -2,10 +2,12 @@ import { useSocket } from './hooks/useSocket.js';
 import { useGameState } from './hooks/useGameState.js';
 import { Landing } from './screens/Landing.js';
 import { Lobby } from './screens/Lobby.js';
+import { Board } from './screens/Board.js';
+import { GameOver } from './screens/GameOver.js';
 
 export function App() {
   const { socket, connected } = useSocket();
-  const { screen, roomState, playerId, error, clearError } = useGameState(socket);
+  const { screen, roomState, gameState, playerId, error, clearError } = useGameState(socket);
 
   if (!socket || !connected) {
     return (
@@ -32,10 +34,20 @@ export function App() {
         );
       }
       return <Landing socket={socket} error={error} clearError={clearError} />;
+    case 'board':
+      if (gameState && playerId) {
+        return <Board socket={socket} gameState={gameState} playerId={playerId} />;
+      }
+      return <Landing socket={socket} error={error} clearError={clearError} />;
+    case 'game_over':
+      if (gameState && playerId) {
+        return <GameOver gameState={gameState} playerId={playerId} />;
+      }
+      return <Landing socket={socket} error={error} clearError={clearError} />;
     default:
       return (
         <div style={styles.connecting}>
-          <p>Screen "{screen}" coming soon...</p>
+          <p>Screen &quot;{screen}&quot; coming soon...</p>
         </div>
       );
   }

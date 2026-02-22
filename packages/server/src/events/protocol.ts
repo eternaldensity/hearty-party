@@ -2,6 +2,7 @@ import type { Server, Socket } from 'socket.io';
 import type { ClientEvents, ServerEvents, GameSettings } from '@hearty-party/shared';
 import { MIN_PLAYERS } from '@hearty-party/shared';
 import { RoomManager } from '../rooms/RoomManager.js';
+import { GameStateMachine } from '../game/GameStateMachine.js';
 
 type TypedServer = Server<ClientEvents, ServerEvents>;
 type TypedSocket = Socket<ClientEvents, ServerEvents>;
@@ -85,8 +86,21 @@ export function registerEventHandlers(io: TypedServer, roomManager: RoomManager)
       room.inGame = true;
       console.log(`[game:start] Room ${room.code} starting game with ${room.playerCount} players`);
 
-      // GameStateMachine integration will be added in Phase 3 (issue to be created).
-      // For now the room is marked as inGame, which prevents new players from joining.
+      const game = new GameStateMachine(io, room, room.settings);
+      roomManager.setGame(room.code, game);
+      game.start();
+    });
+
+    socket.on('game:roll-dice', () => {
+      const game = roomManager.getGameByPlayerId(socket.id);
+      if (!game) return;
+      game.handleDiceRoll(socket.id);
+    });
+
+    socket.on('game:choose-path', ({ pathIndex }) => {
+      const game = roomManager.getGameByPlayerId(socket.id);
+      if (!game) return;
+      game.handlePathChoice(socket.id, pathIndex);
     });
 
     socket.on('disconnect', () => {
