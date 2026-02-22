@@ -1,25 +1,17 @@
-import { useEffect, useState } from 'react';
-import type { GameState, MinigameRanking, MinigameReward } from '@hearty-party/shared';
+import type { GameState } from '@hearty-party/shared';
 import type { GameSocket } from '../hooks/useSocket.js';
+import type { MinigameEndData } from '../hooks/useGameState.js';
 
 interface ResultsScreenProps {
   socket: GameSocket;
   gameState: GameState;
   playerId: string;
+  minigameEndData: MinigameEndData | null;
 }
 
-export function ResultsScreen({ socket, gameState, playerId }: ResultsScreenProps) {
-  const [rankings, setRankings] = useState<MinigameRanking[]>([]);
-  const [rewards, setRewards] = useState<MinigameReward[]>([]);
-
-  useEffect(() => {
-    const onEnd = ({ rankings: r, rewards: rw }: { rankings: MinigameRanking[]; rewards: MinigameReward[] }) => {
-      setRankings(r);
-      setRewards(rw);
-    };
-    socket.on('minigame:end', onEnd);
-    return () => { socket.off('minigame:end', onEnd); };
-  }, [socket]);
+export function ResultsScreen({ socket, gameState, playerId, minigameEndData }: ResultsScreenProps) {
+  const rankings = minigameEndData?.rankings ?? [];
+  const rewards = minigameEndData?.rewards ?? [];
 
   const playerNameMap = new Map(gameState.players.map((p) => [p.id, p.name]));
 

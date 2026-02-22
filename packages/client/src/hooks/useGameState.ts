@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { GameState, GamePhase, MinigameDef, RoomState } from '@hearty-party/shared';
+import type { GameState, GamePhase, MinigameDef, MinigameRanking, MinigameReward, RoomState } from '@hearty-party/shared';
 import type { GameSocket } from './useSocket.js';
 
 export type Screen = 'landing' | 'lobby' | 'board' | 'minigame' | 'results' | 'game_over';
@@ -14,6 +14,11 @@ export interface MinigameStartData {
   duration: number;
 }
 
+export interface MinigameEndData {
+  rankings: MinigameRanking[];
+  rewards: MinigameReward[];
+}
+
 interface UseGameStateReturn {
   screen: Screen;
   roomState: RoomState | null;
@@ -22,6 +27,7 @@ interface UseGameStateReturn {
   error: string | null;
   confession: ConfessionData | null;
   minigameStartData: MinigameStartData | null;
+  minigameEndData: MinigameEndData | null;
   clearError: () => void;
 }
 
@@ -47,6 +53,7 @@ export function useGameState(socket: GameSocket | null): UseGameStateReturn {
   const [error, setError] = useState<string | null>(null);
   const [confession, setConfession] = useState<ConfessionData | null>(null);
   const [minigameStartData, setMinigameStartData] = useState<MinigameStartData | null>(null);
+  const [minigameEndData, setMinigameEndData] = useState<MinigameEndData | null>(null);
 
   const clearError = useCallback(() => setError(null), []);
 
@@ -98,11 +105,18 @@ export function useGameState(socket: GameSocket | null): UseGameStateReturn {
       setMinigameStartData(data);
     };
 
+    const onMinigameEnd = (data: MinigameEndData) => {
+      setMinigameEndData(data);
+    };
+
     const onStateUpdate = ({ phase, roundNumber, gameState: gs }: { phase: GamePhase; roundNumber: number; gameState: GameState }) => {
       setGameState(gs);
       // Clear minigame data when leaving minigame phases
       if (phase !== 'minigame_intro' && phase !== 'minigame_play') {
         setMinigameStartData(null);
+      }
+      if (phase !== 'minigame_results') {
+        setMinigameEndData(null);
       }
       const newScreen = PHASE_TO_SCREEN[phase];
       if (newScreen) {
@@ -123,6 +137,7 @@ export function useGameState(socket: GameSocket | null): UseGameStateReturn {
     socket.on('game:state-update', onStateUpdate);
     socket.on('game:over', onGameOver);
     socket.on('minigame:start', onMinigameStart);
+    socket.on('minigame:end', onMinigameEnd);
 
     return () => {
       socket.off('room:created', onCreated);
@@ -133,8 +148,9 @@ export function useGameState(socket: GameSocket | null): UseGameStateReturn {
       socket.off('game:state-update', onStateUpdate);
       socket.off('game:over', onGameOver);
       socket.off('minigame:start', onMinigameStart);
+      socket.off('minigame:end', onMinigameEnd);
     };
   }, [socket]);
 
-  return { screen, roomState, gameState, playerId, error, confession, minigameStartData, clearError };
+  return { screen, roomState, gameState, playerId, error, confession, minigameStartData, minigameEndData, clearError };
 }
