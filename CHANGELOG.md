@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- Restructure player guide into per-topic files with minigame and confession docs (#13)
 - Add 5 remaining minigames, confession win condition (Phase 6) (#6)
 - Add game board rendering and dice-based movement system (#2)
 - Add monorepo scaffolding with npm workspaces, TypeScript, Express, Socket.IO, React, and Vite (#1)
