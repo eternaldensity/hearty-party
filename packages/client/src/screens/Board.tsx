@@ -1,10 +1,13 @@
-import { useEffect, useState } from 'react';
-import type { GameState, PlayerState, GamePhase } from '@hearty-party/shared';
+import { useEffect, useState, useMemo } from 'react';
+import type { GameState, PlayerState, GamePhase, DialoguePrompt, ItemDef } from '@hearty-party/shared';
 import { SPACE_COLORS, BOARD_SIZE } from '@hearty-party/shared';
 import type { GameSocket } from '../hooks/useSocket.js';
 import { BoardSpace } from '../components/BoardSpace.js';
 import { DiceRoll } from '../components/DiceRoll.js';
 import { AffectionMeter } from '../components/AffectionMeter.js';
+import { DialoguePanel } from '../components/DialoguePanel.js';
+import { ShopPanel } from '../components/ShopPanel.js';
+import { SpaceEventToast } from '../components/SpaceEventToast.js';
 
 interface BoardProps {
   socket: GameSocket;
@@ -30,9 +33,20 @@ export function Board({ socket, gameState, playerId }: BoardProps) {
   const [movingPlayerId, setMovingPlayerId] = useState<string | null>(null);
   const [movingPath, setMovingPath] = useState<number[]>([]);
   const [animPos, setAnimPos] = useState<number | null>(null);
+  const [dialoguePrompt, setDialoguePrompt] = useState<DialoguePrompt | null>(null);
+  const [shopData, setShopData] = useState<{ items: ItemDef[]; playerTokens: number } | null>(null);
 
   const myPlayer = gameState.players.find((p) => p.id === playerId);
   const activePlayer = gameState.players[gameState.activePlayerIndex];
+
+  // Build player name map for SpaceEventToast
+  const playerNames = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const p of gameState.players) {
+      map.set(p.id, p.name);
+    }
+    return map;
+  }, [gameState.players]);
 
   // Listen for movement animation events
   useEffect(() => {
@@ -66,6 +80,32 @@ export function Board({ socket, gameState, playerId }: BoardProps) {
     socket.on('game:dice-results', onDice);
     return () => { socket.off('game:dice-results', onDice); };
   }, [socket]);
+
+  // Listen for dialogue prompts
+  useEffect(() => {
+    const onDialogue = ({ prompt }: { prompt: DialoguePrompt }) => {
+      setDialoguePrompt(prompt);
+    };
+    socket.on('game:dialogue', onDialogue);
+    return () => { socket.off('game:dialogue', onDialogue); };
+  }, [socket]);
+
+  // Listen for shop open
+  useEffect(() => {
+    const onShop = ({ items, playerTokens }: { items: ItemDef[]; playerTokens: number }) => {
+      setShopData({ items, playerTokens });
+    };
+    socket.on('game:shop-open', onShop);
+    return () => { socket.off('game:shop-open', onShop); };
+  }, [socket]);
+
+  // Clear dialogue/shop overlays when phase changes away from space_phase
+  useEffect(() => {
+    if (gameState.phase !== 'space_phase') {
+      setDialoguePrompt(null);
+      setShopData(null);
+    }
+  }, [gameState.phase]);
 
   // Get effective player position (accounting for animation)
   const getPlayerPosition = (p: PlayerState): number => {
@@ -250,8 +290,8 @@ export function Board({ socket, gameState, playerId }: BoardProps) {
         })}
       </div>
 
-      {/* Space phase events */}
-      {gameState.phase === 'space_phase' && activePlayer && (
+      {/* Space phase — show waiting message if not in a dialogue/shop */}
+      {gameState.phase === 'space_phase' && activePlayer && !dialoguePrompt && !shopData && (
         <div style={styles.spaceEvent}>
           <p>{activePlayer.name} landed on a space...</p>
         </div>
@@ -263,6 +303,28 @@ export function Board({ socket, gameState, playerId }: BoardProps) {
           <p>Round {gameState.currentRound} complete!</p>
         </div>
       )}
+
+      {/* Dialogue panel overlay */}
+      {dialoguePrompt && (
+        <DialoguePanel
+          socket={socket}
+          prompt={dialoguePrompt}
+          onDone={() => setDialoguePrompt(null)}
+        />
+      )}
+
+      {/* Shop panel overlay */}
+      {shopData && (
+        <ShopPanel
+          socket={socket}
+          items={shopData.items}
+          playerTokens={shopData.playerTokens}
+          onDone={() => setShopData(null)}
+        />
+      )}
+
+      {/* Space event toast notifications (always mounted) */}
+      <SpaceEventToast socket={socket} playerNames={playerNames} />
     </div>
   );
 }

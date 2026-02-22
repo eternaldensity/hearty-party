@@ -103,6 +103,24 @@ export function registerEventHandlers(io: TypedServer, roomManager: RoomManager)
       game.handlePathChoice(socket.id, pathIndex);
     });
 
+    socket.on('game:dialogue-choice', ({ choiceIndex }) => {
+      const game = roomManager.getGameByPlayerId(socket.id);
+      if (!game) return;
+      game.handleDialogueChoice(socket.id, choiceIndex);
+    });
+
+    socket.on('game:shop-buy', ({ itemId }) => {
+      const game = roomManager.getGameByPlayerId(socket.id);
+      if (!game) return;
+      game.handleShopBuy(socket.id, itemId);
+    });
+
+    socket.on('game:shop-close', () => {
+      const game = roomManager.getGameByPlayerId(socket.id);
+      if (!game) return;
+      game.handleShopClose(socket.id);
+    });
+
     socket.on('disconnect', () => {
       console.log(`[disconnect] ${socket.id}`);
       const room = roomManager.getRoomByPlayerId(socket.id);

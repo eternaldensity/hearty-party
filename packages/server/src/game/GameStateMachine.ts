@@ -6,19 +6,34 @@ import type {
   GamePhase,
   GameSettings,
   PlayerState,
+  ItemId,
 } from '@hearty-party/shared';
 import {
   createDefaultBoard,
   getReachableSpaces,
   CHARACTERS,
+  getCharacter,
   DICE_MIN,
   DICE_MAX,
   DICE_AUTO_ROLL_MS,
   ROUND_START_DISPLAY_MS,
   ROUND_END_DISPLAY_MS,
   CHARM_FOUNTAIN_AMOUNT,
+  CUTTHROAT_STEAL_AMOUNT,
+  CUTTHROAT_JEALOUSY_LOSS,
+  getShopItems,
+  getRandomDialogue,
+  getRandomCharacterDialogue,
+  getRandomEvent,
 } from '@hearty-party/shared';
 import type { Room } from '../rooms/Room.js';
+import {
+  calculateDialogueAffection,
+  calculateLoveNestAffection,
+  applyAffection,
+  randomCharacterId,
+} from './AffectionSystem.js';
+import { buyItem } from './ItemSystem.js';
 
 type TypedServer = Server<ClientEvents, ServerEvents>;
 
@@ -27,8 +42,15 @@ export class GameStateMachine {
   private room: Room;
   private state: GameState;
   private autoRollTimer: ReturnType<typeof setTimeout> | null = null;
-  /** Pending path choices: playerId → resolve function */
+  private _diceResolve: (() => void) | null = null;
+
+  // Pending async player choices
   private pendingPathChoice: Map<string, (pathIndex: number) => void> = new Map();
+  private pendingDialogueChoice: Map<string, (choiceIndex: number) => void> = new Map();
+  private pendingShopDone: Map<string, () => void> = new Map();
+
+  // Track last affection gain per player (for Mirror item)
+  private lastAffectionGain: Map<string, { characterId: string; amount: number }> = new Map();
 
   constructor(io: TypedServer, room: Room, settings: GameSettings) {
     this.io = io;
@@ -72,11 +94,45 @@ export class GameStateMachine {
     return this.state.players.find((p) => p.id === playerId);
   }
 
+  // ── External event handlers (called from protocol.ts) ──
+
   handlePathChoice(playerId: string, pathIndex: number): void {
     const resolve = this.pendingPathChoice.get(playerId);
     if (resolve) {
       this.pendingPathChoice.delete(playerId);
       resolve(pathIndex);
+    }
+  }
+
+  handleDialogueChoice(playerId: string, choiceIndex: number): void {
+    const resolve = this.pendingDialogueChoice.get(playerId);
+    if (resolve) {
+      this.pendingDialogueChoice.delete(playerId);
+      resolve(choiceIndex);
+    }
+  }
+
+  handleShopBuy(playerId: string, itemId: ItemId): void {
+    const player = this.getPlayer(playerId);
+    if (!player) return;
+    const result = buyItem(player, itemId, this.state.settings.cutthroatMode);
+    if (!result.success) {
+      this.emitToPlayer(playerId, 'room:error', { message: result.error! });
+      return;
+    }
+    // Re-send shop with updated tokens
+    this.emitToPlayer(playerId, 'game:shop-open', {
+      items: getShopItems(this.state.settings.cutthroatMode),
+      playerTokens: player.charmTokens,
+    });
+    this.broadcastState();
+  }
+
+  handleShopClose(playerId: string): void {
+    const resolve = this.pendingShopDone.get(playerId);
+    if (resolve) {
+      this.pendingShopDone.delete(playerId);
+      resolve();
     }
   }
 
@@ -87,7 +143,6 @@ export class GameStateMachine {
     player.hasRolled = true;
     player.lastRoll = this.rollDice();
 
-    // Check if all connected players have rolled
     const allRolled = this.state.players
       .filter((p) => p.connected)
       .every((p) => p.hasRolled);
@@ -98,11 +153,11 @@ export class GameStateMachine {
     }
   }
 
+  // ── Game lifecycle ──
+
   async start(): Promise<void> {
     this.setPhase('game_start');
     this.broadcastState();
-
-    // Small delay then begin round 1
     await this.delay(1000);
     await this.runGameLoop();
   }
@@ -122,10 +177,15 @@ export class GameStateMachine {
       // MOVE_PHASE
       await this.runMovePhase();
 
-      // SPACE_PHASE (stub for now — will be implemented in Phase 4)
+      // SPACE_PHASE
       await this.runSpacePhase();
 
-      // MINIGAME phases skipped for now (Phase 5)
+      // Cutthroat: jealousy mechanic at end of each round
+      if (this.state.settings.cutthroatMode) {
+        this.applyJealousy();
+      }
+
+      // MINIGAME phases (Phase 5)
 
       // ROUND_END
       this.setPhase('round_end');
@@ -133,13 +193,13 @@ export class GameStateMachine {
       await this.delay(ROUND_END_DISPLAY_MS);
     }
 
-    // GAME_OVER
     this.setPhase('game_over');
     this.broadcastGameOver();
   }
 
+  // ── Dice Phase ──
+
   private async runDicePhase(): Promise<void> {
-    // Reset roll state
     for (const p of this.state.players) {
       p.hasRolled = false;
       p.lastRoll = 0;
@@ -148,21 +208,8 @@ export class GameStateMachine {
     this.setPhase('dice_phase');
     this.broadcastState();
 
-    // Wait for all players to roll (or auto-roll after timeout)
     await new Promise<void>((resolve) => {
-      const checkAllRolled = () => {
-        const allRolled = this.state.players
-          .filter((p) => p.connected)
-          .every((p) => p.hasRolled);
-        if (allRolled) resolve();
-      };
-
-      // Store the resolve so finalizeDicePhase can call it
-      this._diceResolve = () => {
-        resolve();
-      };
-
-      // Auto-roll timer
+      this._diceResolve = resolve;
       this.autoRollTimer = setTimeout(() => {
         this.autoRollRemaining();
         resolve();
@@ -170,10 +217,7 @@ export class GameStateMachine {
     });
   }
 
-  private _diceResolve: (() => void) | null = null;
-
   private finalizeDicePhase(): void {
-    // Broadcast all roll results
     const rolls = this.state.players
       .filter((p) => p.connected)
       .map((p) => ({ playerId: p.id, value: p.lastRoll }));
@@ -196,11 +240,12 @@ export class GameStateMachine {
     this.finalizeDicePhase();
   }
 
+  // ── Move Phase ──
+
   private async runMovePhase(): Promise<void> {
     this.setPhase('move_phase');
     this.broadcastState();
 
-    // Move players sequentially
     for (let i = 0; i < this.state.players.length; i++) {
       const player = this.state.players[i];
       if (!player.connected || player.lastRoll === 0) continue;
@@ -209,7 +254,6 @@ export class GameStateMachine {
       this.broadcastState();
 
       await this.movePlayer(player);
-      // Brief pause between players
       await this.delay(500);
     }
   }
@@ -219,17 +263,12 @@ export class GameStateMachine {
     const paths = getReachableSpaces(this.state.board, player.position, steps);
 
     let chosenPath: number[];
-
     if (paths.length === 1) {
-      // Only one possible path
       chosenPath = paths[0];
     } else {
-      // Player needs to choose at a branch point — find where the paths diverge
-      // Send choice to the player and wait
       chosenPath = await this.waitForPathChoice(player, paths);
     }
 
-    // Animate the movement
     const finalSpace = chosenPath[chosenPath.length - 1];
     this.io.to(this.room.code).emit('game:player-moving', {
       playerId: player.id,
@@ -237,31 +276,12 @@ export class GameStateMachine {
       finalSpace,
     });
 
-    // Wait for animation
     await this.delay(chosenPath.length * 300 + 200);
-
-    // Update position
     player.position = finalSpace;
   }
 
   private async waitForPathChoice(player: PlayerState, paths: number[][]): Promise<number[]> {
-    // Find the branch point (first space where paths diverge)
-    // Send the options to the player
-    const branchOptions = paths.map((path, idx) => ({
-      pathIndex: idx,
-      firstStep: path[1], // the first space after current position
-      destination: path[path.length - 1],
-    }));
-
-    // Emit a state update so the client knows it needs to choose
-    this.io.to(this.room.code).emit('game:state-update', {
-      phase: 'move_phase',
-      roundNumber: this.state.currentRound,
-      gameState: {
-        ...this.state,
-        // Client will check if they're the active player and show branch UI
-      },
-    });
+    this.broadcastState();
 
     return new Promise<number[]>((resolve) => {
       this.pendingPathChoice.set(player.id, (pathIndex: number) => {
@@ -269,7 +289,6 @@ export class GameStateMachine {
         resolve(paths[idx]);
       });
 
-      // Auto-choose after 10 seconds
       setTimeout(() => {
         if (this.pendingPathChoice.has(player.id)) {
           this.pendingPathChoice.delete(player.id);
@@ -278,6 +297,8 @@ export class GameStateMachine {
       }, 10000);
     });
   }
+
+  // ── Space Phase ──
 
   private async runSpacePhase(): Promise<void> {
     this.setPhase('space_phase');
@@ -288,37 +309,370 @@ export class GameStateMachine {
       if (!player.connected) continue;
 
       this.state.activePlayerIndex = i;
+      this.broadcastState();
       const space = this.state.board.spaces[player.position];
 
-      // Handle simple space effects immediately
       switch (space.type) {
-        case 'charm_fountain':
-          player.charmTokens += CHARM_FOUNTAIN_AMOUNT;
-          this.io.to(this.room.code).emit('game:space-event', {
-            playerId: player.id,
-            spaceType: space.type,
-            eventData: { tokensGained: CHARM_FOUNTAIN_AMOUNT },
-          });
-          await this.delay(1500);
-          break;
-
         case 'blank':
-          // Nothing happens
           break;
 
-        // Date spots, love nests, gift shops, events, and rivals
-        // will be implemented in Phase 4
-        default:
-          this.io.to(this.room.code).emit('game:space-event', {
-            playerId: player.id,
-            spaceType: space.type,
-            eventData: null,
-          });
-          await this.delay(1000);
+        case 'charm_fountain':
+          await this.handleCharmFountain(player);
+          break;
+
+        case 'date_spot':
+          await this.handleDateSpot(player);
+          break;
+
+        case 'love_nest':
+          await this.handleLoveNest(player, space.characterId!);
+          break;
+
+        case 'gift_shop':
+          await this.handleGiftShop(player);
+          break;
+
+        case 'event':
+          await this.handleEvent(player);
+          break;
+
+        case 'rival':
+          await this.handleRival(player);
           break;
       }
     }
   }
+
+  private async handleCharmFountain(player: PlayerState): Promise<void> {
+    player.charmTokens += CHARM_FOUNTAIN_AMOUNT;
+    this.io.to(this.room.code).emit('game:space-event', {
+      playerId: player.id,
+      spaceType: 'charm_fountain',
+      eventData: {
+        description: `Found ${CHARM_FOUNTAIN_AMOUNT} Charm Tokens at the fountain!`,
+        tokensGained: CHARM_FOUNTAIN_AMOUNT,
+      },
+    });
+    this.broadcastState();
+    await this.delay(2000);
+  }
+
+  private async handleDateSpot(player: PlayerState): Promise<void> {
+    const prompt = getRandomCharacterDialogue();
+    if (!prompt) return;
+
+    const character = getCharacter(prompt.characterId);
+    if (!character) return;
+
+    // Send dialogue to the active player
+    this.emitToPlayer(player.id, 'game:dialogue', { prompt });
+
+    // Notify others
+    this.io.to(this.room.code).emit('game:space-event', {
+      playerId: player.id,
+      spaceType: 'date_spot',
+      eventData: {
+        description: `${player.name} ran into ${character.name} at a Date Spot!`,
+        characterId: character.id,
+        characterName: character.name,
+      },
+    });
+
+    // Wait for player choice (15s timeout)
+    const choiceIndex = await this.waitForDialogueChoice(player.id);
+    const choice = prompt.choices[Math.max(0, Math.min(choiceIndex, prompt.choices.length - 1))];
+    const affectionChange = calculateDialogueAffection(character, choice);
+
+    const { applied } = applyAffection(player, character.id, affectionChange);
+    if (applied > 0) {
+      this.lastAffectionGain.set(player.id, { characterId: character.id, amount: applied });
+    }
+
+    // Handle negative effects with shield
+    if (applied < 0 && player.shielded) {
+      player.shielded = false;
+      applyAffection(player, character.id, -applied); // undo
+      this.io.to(this.room.code).emit('game:space-event', {
+        playerId: player.id,
+        spaceType: 'date_spot',
+        eventData: {
+          description: `${player.name}'s Shield Brooch blocked the awkward moment!`,
+          affectionChange: 0,
+          characterId: character.id,
+        },
+      });
+    } else {
+      this.io.to(this.room.code).emit('game:space-event', {
+        playerId: player.id,
+        spaceType: 'date_spot',
+        eventData: {
+          description: applied >= 0
+            ? `${character.name} liked that! +${applied} affection`
+            : `${character.name} didn't appreciate that... ${applied} affection`,
+          affectionChange: applied,
+          characterId: character.id,
+          choiceText: choice.text,
+        },
+      });
+    }
+
+    this.broadcastState();
+    await this.delay(2500);
+  }
+
+  private async handleLoveNest(player: PlayerState, characterId: string): Promise<void> {
+    const character = getCharacter(characterId);
+    if (!character) return;
+
+    const prompt = getRandomDialogue(characterId);
+    if (!prompt) return;
+
+    this.emitToPlayer(player.id, 'game:dialogue', { prompt });
+
+    this.io.to(this.room.code).emit('game:space-event', {
+      playerId: player.id,
+      spaceType: 'love_nest',
+      eventData: {
+        description: `${player.name} visited ${character.name}'s Love Nest!`,
+        characterId: character.id,
+        characterName: character.name,
+      },
+    });
+
+    const choiceIndex = await this.waitForDialogueChoice(player.id);
+    const choice = prompt.choices[Math.max(0, Math.min(choiceIndex, prompt.choices.length - 1))];
+    const affectionChange = calculateLoveNestAffection(character, choice);
+
+    const { applied } = applyAffection(player, character.id, affectionChange);
+    this.lastAffectionGain.set(player.id, { characterId: character.id, amount: applied });
+
+    this.io.to(this.room.code).emit('game:space-event', {
+      playerId: player.id,
+      spaceType: 'love_nest',
+      eventData: {
+        description: `${character.name} and ${player.name} had a lovely time! +${applied} affection`,
+        affectionChange: applied,
+        characterId: character.id,
+        choiceText: choice.text,
+      },
+    });
+
+    this.broadcastState();
+    await this.delay(2500);
+  }
+
+  private async handleGiftShop(player: PlayerState): Promise<void> {
+    const items = getShopItems(this.state.settings.cutthroatMode);
+
+    this.emitToPlayer(player.id, 'game:shop-open', {
+      items,
+      playerTokens: player.charmTokens,
+    });
+
+    this.io.to(this.room.code).emit('game:space-event', {
+      playerId: player.id,
+      spaceType: 'gift_shop',
+      eventData: { description: `${player.name} is browsing the Gift Shop!` },
+    });
+
+    await this.waitForShopClose(player.id);
+    this.broadcastState();
+  }
+
+  private async handleEvent(player: PlayerState): Promise<void> {
+    const { event, tokenChange, affectionChange } = getRandomEvent();
+    const charId = randomCharacterId();
+    const character = getCharacter(charId);
+
+    switch (event.scope) {
+      case 'self': {
+        player.charmTokens = Math.max(0, player.charmTokens + tokenChange);
+        if (affectionChange < 0 && player.shielded) {
+          player.shielded = false;
+          this.io.to(this.room.code).emit('game:space-event', {
+            playerId: player.id,
+            spaceType: 'event',
+            eventData: {
+              description: `${player.name}'s Shield Brooch blocked: "${event.description}"`,
+              tokenChange,
+              affectionChange: 0,
+            },
+          });
+        } else {
+          if (affectionChange !== 0) {
+            applyAffection(player, charId, affectionChange);
+          }
+          this.io.to(this.room.code).emit('game:space-event', {
+            playerId: player.id,
+            spaceType: 'event',
+            eventData: {
+              description: event.description,
+              tokenChange,
+              affectionChange,
+              characterName: character?.name,
+            },
+          });
+        }
+        break;
+      }
+      case 'all': {
+        for (const p of this.state.players) {
+          if (!p.connected) continue;
+          p.charmTokens = Math.max(0, p.charmTokens + tokenChange);
+          if (affectionChange !== 0) {
+            applyAffection(p, charId, affectionChange);
+          }
+        }
+        this.io.to(this.room.code).emit('game:space-event', {
+          playerId: player.id,
+          spaceType: 'event',
+          eventData: {
+            description: event.description,
+            tokenChange,
+            affectionChange,
+            affectsAll: true,
+            characterName: character?.name,
+          },
+        });
+        break;
+      }
+      case 'random_other': {
+        const others = this.state.players.filter((p) => p.id !== player.id && p.connected);
+        if (others.length > 0) {
+          const target = others[Math.floor(Math.random() * others.length)];
+          target.charmTokens = Math.max(0, target.charmTokens + tokenChange);
+          if (affectionChange !== 0) {
+            applyAffection(target, charId, affectionChange);
+          }
+          this.io.to(this.room.code).emit('game:space-event', {
+            playerId: player.id,
+            spaceType: 'event',
+            eventData: {
+              description: event.description,
+              targetName: target.name,
+              tokenChange,
+              affectionChange,
+              characterName: character?.name,
+            },
+          });
+        }
+        break;
+      }
+    }
+
+    this.broadcastState();
+    await this.delay(2500);
+  }
+
+  private async handleRival(player: PlayerState): Promise<void> {
+    if (this.state.settings.cutthroatMode) {
+      const others = this.state.players.filter((p) => p.id !== player.id && p.connected);
+      if (others.length > 0) {
+        const target = others[Math.floor(Math.random() * others.length)];
+        const charId = randomCharacterId();
+        const character = getCharacter(charId);
+
+        if (target.shielded) {
+          target.shielded = false;
+          this.io.to(this.room.code).emit('game:space-event', {
+            playerId: player.id,
+            spaceType: 'rival',
+            eventData: {
+              description: `${player.name} tried to steal from ${target.name}, but their Shield Brooch blocked it!`,
+            },
+          });
+        } else {
+          applyAffection(target, charId, -CUTTHROAT_STEAL_AMOUNT);
+          applyAffection(player, charId, CUTTHROAT_STEAL_AMOUNT);
+          this.io.to(this.room.code).emit('game:space-event', {
+            playerId: player.id,
+            spaceType: 'rival',
+            eventData: {
+              description: `${player.name} stole ${CUTTHROAT_STEAL_AMOUNT} affection from ${target.name} with ${character?.name}!`,
+              targetName: target.name,
+              characterName: character?.name,
+            },
+          });
+        }
+      }
+    } else {
+      const others = this.state.players.filter((p) => p.id !== player.id && p.connected);
+      if (others.length > 0) {
+        const rival = others[Math.floor(Math.random() * others.length)];
+        const charId = randomCharacterId();
+        const character = getCharacter(charId);
+        const playerBonus = Math.floor(Math.random() * 3) + 2;
+        const rivalBonus = Math.floor(Math.random() * 3) + 1;
+
+        applyAffection(player, charId, playerBonus);
+        applyAffection(rival, charId, rivalBonus);
+
+        this.io.to(this.room.code).emit('game:space-event', {
+          playerId: player.id,
+          spaceType: 'rival',
+          eventData: {
+            description: `${player.name} and ${rival.name} had a friendly contest over ${character?.name}! ${player.name} +${playerBonus}, ${rival.name} +${rivalBonus}`,
+            rivalName: rival.name,
+            characterName: character?.name,
+          },
+        });
+      }
+    }
+
+    this.broadcastState();
+    await this.delay(2500);
+  }
+
+  // ── Cutthroat: Jealousy ──
+
+  private applyJealousy(): void {
+    for (const char of CHARACTERS) {
+      let maxAff = 0;
+      for (const p of this.state.players) {
+        if (p.connected && (p.affection[char.id] ?? 0) > maxAff) {
+          maxAff = p.affection[char.id];
+        }
+      }
+      if (maxAff <= 0) continue;
+
+      const tiedPlayers = this.state.players.filter(
+        (p) => p.connected && p.affection[char.id] === maxAff,
+      );
+      if (tiedPlayers.length >= 2) {
+        for (const p of tiedPlayers) {
+          applyAffection(p, char.id, -CUTTHROAT_JEALOUSY_LOSS);
+        }
+      }
+    }
+  }
+
+  // ── Async choice helpers ──
+
+  private waitForDialogueChoice(playerId: string): Promise<number> {
+    return new Promise<number>((resolve) => {
+      this.pendingDialogueChoice.set(playerId, resolve);
+      setTimeout(() => {
+        if (this.pendingDialogueChoice.has(playerId)) {
+          this.pendingDialogueChoice.delete(playerId);
+          resolve(0);
+        }
+      }, 15000);
+    });
+  }
+
+  private waitForShopClose(playerId: string): Promise<void> {
+    return new Promise<void>((resolve) => {
+      this.pendingShopDone.set(playerId, resolve);
+      setTimeout(() => {
+        if (this.pendingShopDone.has(playerId)) {
+          this.pendingShopDone.delete(playerId);
+          resolve();
+        }
+      }, 20000);
+    });
+  }
+
+  // ── Broadcasting ──
 
   private setPhase(phase: GamePhase): void {
     this.state.phase = phase;
@@ -360,6 +714,15 @@ export class GameStateMachine {
       winnerId: standings[0]?.playerId ?? '',
     });
   }
+
+  private emitToPlayer(playerId: string, event: keyof ServerEvents, data: unknown): void {
+    const socket = this.io.sockets.sockets.get(playerId);
+    if (socket) {
+      (socket.emit as (ev: string, data: unknown) => void)(event, data);
+    }
+  }
+
+  // ── Utilities ──
 
   private rollDice(): number {
     return Math.floor(Math.random() * (DICE_MAX - DICE_MIN + 1)) + DICE_MIN;

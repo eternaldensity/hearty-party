@@ -30,6 +30,7 @@ export interface ClientEvents {
   'game:choose-path': (data: { pathIndex: number }) => void;
   'game:dialogue-choice': (data: { choiceIndex: number }) => void;
   'game:shop-buy': (data: { itemId: ItemId; targetCharacterId?: string }) => void;
+  'game:shop-close': () => void;
   'game:use-item': (data: { itemId: ItemId; targetPlayerId?: string; targetCharacterId?: string }) => void;
   'minigame:input': (data: { type: string; data: unknown }) => void;
   'minigame:submit': (data: { result: unknown }) => void;
