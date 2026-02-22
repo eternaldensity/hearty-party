@@ -6,3 +6,4 @@ export * from './items.js';
 export * from './events.js';
 export * from './dialogues.js';
 export * from './gameEvents.js';
+export * from './minigames.js';

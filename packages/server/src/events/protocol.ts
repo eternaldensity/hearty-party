@@ -121,6 +121,18 @@ export function registerEventHandlers(io: TypedServer, roomManager: RoomManager)
       game.handleShopClose(socket.id);
     });
 
+    socket.on('minigame:input', ({ type, data }) => {
+      const game = roomManager.getGameByPlayerId(socket.id);
+      if (!game) return;
+      game.handleMinigameInput(socket.id, type, data);
+    });
+
+    socket.on('minigame:submit', ({ result }) => {
+      const game = roomManager.getGameByPlayerId(socket.id);
+      if (!game) return;
+      game.handleMinigameSubmit(socket.id, result);
+    });
+
     socket.on('disconnect', () => {
       console.log(`[disconnect] ${socket.id}`);
       const room = roomManager.getRoomByPlayerId(socket.id);

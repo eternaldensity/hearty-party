@@ -34,6 +34,7 @@ import {
   randomCharacterId,
 } from './AffectionSystem.js';
 import { buyItem } from './ItemSystem.js';
+import { MinigameRunner } from '../minigames/MinigameRunner.js';
 
 type TypedServer = Server<ClientEvents, ServerEvents>;
 
@@ -51,6 +52,8 @@ export class GameStateMachine {
 
   // Track last affection gain per player (for Mirror item)
   private lastAffectionGain: Map<string, { characterId: string; amount: number }> = new Map();
+
+  private minigameRunner: MinigameRunner;
 
   constructor(io: TypedServer, room: Room, settings: GameSettings) {
     this.io = io;
@@ -84,6 +87,8 @@ export class GameStateMachine {
       currentMinigameId: null,
       activePlayerIndex: 0,
     };
+
+    this.minigameRunner = new MinigameRunner(io, room.code);
   }
 
   get gameState(): GameState {
@@ -136,6 +141,14 @@ export class GameStateMachine {
     }
   }
 
+  handleMinigameInput(playerId: string, type: string, data: unknown): void {
+    this.minigameRunner.routeInput(playerId, type, data);
+  }
+
+  handleMinigameSubmit(playerId: string, result: unknown): void {
+    this.minigameRunner.routeSubmit(playerId, result);
+  }
+
   handleDiceRoll(playerId: string): void {
     const player = this.getPlayer(playerId);
     if (!player || this.state.phase !== 'dice_phase' || player.hasRolled) return;
@@ -185,7 +198,8 @@ export class GameStateMachine {
         this.applyJealousy();
       }
 
-      // MINIGAME phases (Phase 5)
+      // MINIGAME phases
+      await this.runMinigamePhase();
 
       // ROUND_END
       this.setPhase('round_end');
@@ -341,6 +355,28 @@ export class GameStateMachine {
           break;
       }
     }
+  }
+
+  private async runMinigamePhase(): Promise<void> {
+    const { rewards } = await this.minigameRunner.run(
+      this.state.players,
+      (phase) => this.setPhase(phase as GamePhase),
+      () => this.broadcastState(),
+    );
+
+    this.state.currentMinigameId = this.minigameRunner.currentMinigameId;
+
+    // Apply rewards to player state
+    for (const reward of rewards) {
+      const player = this.getPlayer(reward.playerId);
+      if (!player) continue;
+      player.charmTokens += reward.charmTokens;
+      const charId = randomCharacterId();
+      applyAffection(player, charId, reward.affection);
+    }
+
+    this.state.currentMinigameId = null;
+    this.broadcastState();
   }
 
   private async handleCharmFountain(player: PlayerState): Promise<void> {

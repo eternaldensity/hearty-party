@@ -4,6 +4,8 @@ import { Landing } from './screens/Landing.js';
 import { Lobby } from './screens/Lobby.js';
 import { Board } from './screens/Board.js';
 import { GameOver } from './screens/GameOver.js';
+import { MinigameScreen } from './screens/MinigameScreen.js';
+import { ResultsScreen } from './screens/ResultsScreen.js';
 
 export function App() {
   const { socket, connected } = useSocket();
@@ -37,6 +39,16 @@ export function App() {
     case 'board':
       if (gameState && playerId) {
         return <Board socket={socket} gameState={gameState} playerId={playerId} />;
+      }
+      return <Landing socket={socket} error={error} clearError={clearError} />;
+    case 'minigame':
+      if (gameState && playerId) {
+        return <MinigameScreen socket={socket} gameState={gameState} playerId={playerId} />;
+      }
+      return <Landing socket={socket} error={error} clearError={clearError} />;
+    case 'results':
+      if (gameState && playerId) {
+        return <ResultsScreen socket={socket} gameState={gameState} playerId={playerId} />;
       }
       return <Landing socket={socket} error={error} clearError={clearError} />;
     case 'game_over':

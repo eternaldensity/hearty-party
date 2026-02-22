@@ -52,6 +52,25 @@ export const MINIGAME_RESULTS_MS = 5000;
 export const ROUND_END_DISPLAY_MS = 3000;
 export const RECONNECT_GRACE_MS = 30000;
 
+// ── Minigame: Heart Catcher ──
+
+export const HEART_CATCHER_SPAWN_INTERVAL_MS = 600;
+export const HEART_CATCHER_HEART_LIFETIME_MS = 3000;
+
+// ── Minigame: Love Letter Scramble ──
+
+export const SCRAMBLE_ROUND_COUNT = 5;
+export const SCRAMBLE_ROUND_TIME_MS = 8000;
+export const SCRAMBLE_FIRST_SOLVE_BONUS = 3;
+
+// ── Minigame: Sweet Nothings ──
+
+export const SWEET_NOTHINGS_ROUND_COUNT = 5;
+export const SWEET_NOTHINGS_ROUND_TIME_MS = 6000;
+export const SWEET_NOTHINGS_SPEED_BONUS_MS = 3000;
+export const SWEET_NOTHINGS_FAST_POINTS = 3;
+export const SWEET_NOTHINGS_CORRECT_POINTS = 1;
+
 // ── Board ──
 
 export const BOARD_SIZE = 30;

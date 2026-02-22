@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import type { GameState, PlayerState, GamePhase, DialoguePrompt, ItemDef } from '@hearty-party/shared';
+import type { GameState, PlayerState, GamePhase, DialoguePrompt, ItemDef, MinigameDef } from '@hearty-party/shared';
 import { SPACE_COLORS, BOARD_SIZE } from '@hearty-party/shared';
 import type { GameSocket } from '../hooks/useSocket.js';
 import { BoardSpace } from '../components/BoardSpace.js';
@@ -21,6 +21,7 @@ const PHASE_LABELS: Partial<Record<GamePhase, string>> = {
   dice_phase: 'Roll the Dice!',
   move_phase: 'Moving...',
   space_phase: 'Space Events',
+  minigame_intro: 'Minigame Starting...',
   round_end: 'Round Complete',
 };
 
@@ -35,6 +36,7 @@ export function Board({ socket, gameState, playerId }: BoardProps) {
   const [animPos, setAnimPos] = useState<number | null>(null);
   const [dialoguePrompt, setDialoguePrompt] = useState<DialoguePrompt | null>(null);
   const [shopData, setShopData] = useState<{ items: ItemDef[]; playerTokens: number } | null>(null);
+  const [minigameIntro, setMinigameIntro] = useState<MinigameDef | null>(null);
 
   const myPlayer = gameState.players.find((p) => p.id === playerId);
   const activePlayer = gameState.players[gameState.activePlayerIndex];
@@ -99,11 +101,23 @@ export function Board({ socket, gameState, playerId }: BoardProps) {
     return () => { socket.off('game:shop-open', onShop); };
   }, [socket]);
 
+  // Listen for minigame intro
+  useEffect(() => {
+    const onStart = ({ minigame }: { minigame: MinigameDef; duration: number }) => {
+      setMinigameIntro(minigame);
+    };
+    socket.on('minigame:start', onStart);
+    return () => { socket.off('minigame:start', onStart); };
+  }, [socket]);
+
   // Clear dialogue/shop overlays when phase changes away from space_phase
   useEffect(() => {
     if (gameState.phase !== 'space_phase') {
       setDialoguePrompt(null);
       setShopData(null);
+    }
+    if (gameState.phase !== 'minigame_intro') {
+      setMinigameIntro(null);
     }
   }, [gameState.phase]);
 
@@ -323,6 +337,21 @@ export function Board({ socket, gameState, playerId }: BoardProps) {
         />
       )}
 
+      {/* Minigame intro overlay */}
+      {minigameIntro && (
+        <div style={styles.overlay}>
+          <div style={styles.introPanel}>
+            <h2 style={styles.introTitle}>{minigameIntro.name}</h2>
+            <p style={styles.introDescription}>{minigameIntro.description}</p>
+            <div style={styles.introRules}>
+              <span style={styles.introRulesLabel}>How to play:</span>
+              <p style={{ margin: 0 }}>{minigameIntro.rules}</p>
+            </div>
+            <p style={styles.introTimer}>Starting soon...</p>
+          </div>
+        </div>
+      )}
+
       {/* Space event toast notifications (always mounted) */}
       <SpaceEventToast socket={socket} playerNames={playerNames} />
     </div>
@@ -464,5 +493,57 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '0.75rem',
     color: '#FBBF24',
     fontWeight: 600,
+  },
+  overlay: {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(0,0,0,0.7)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 100,
+    padding: '1rem',
+  },
+  introPanel: {
+    background: '#1F2937',
+    borderRadius: '1rem',
+    padding: '2rem',
+    maxWidth: '400px',
+    width: '100%',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '1rem',
+    border: '2px solid #F472B6',
+    textAlign: 'center',
+  },
+  introTitle: {
+    fontSize: '1.5rem',
+    fontWeight: 800,
+    color: '#F472B6',
+  },
+  introDescription: {
+    fontSize: '0.95rem',
+    color: '#D1D5DB',
+    lineHeight: 1.5,
+  },
+  introRules: {
+    background: '#111827',
+    borderRadius: '0.5rem',
+    padding: '1rem',
+    textAlign: 'left',
+    fontSize: '0.85rem',
+    color: '#9CA3AF',
+    lineHeight: 1.5,
+  },
+  introRulesLabel: {
+    display: 'block',
+    fontWeight: 700,
+    color: '#FBBF24',
+    marginBottom: '0.25rem',
+  },
+  introTimer: {
+    color: '#FBBF24',
+    fontWeight: 600,
+    fontSize: '1.1rem',
   },
 };

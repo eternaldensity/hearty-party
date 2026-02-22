@@ -157,6 +157,43 @@ export interface MinigameReward {
   charmTokens: number;
 }
 
+// ── Minigame Tick States (sent via minigame:tick sharedState) ──
+
+export interface HeartCatcherHeart {
+  id: string;
+  characterId: string;
+  x: number;       // 0-100 percentage across screen
+  y: number;       // 0-100 percentage down screen
+  spawnedAt: number;
+  active: boolean;
+}
+
+export interface HeartCatcherTickState {
+  hearts: HeartCatcherHeart[];
+  scores: Record<string, number>;
+}
+
+export interface ScrambleTickState {
+  roundIndex: number;
+  totalRounds: number;
+  scrambledWord: string;
+  hint: string;
+  wordLength: number;
+  roundSolved: boolean;
+  solvedBy: string | null;
+  scores: Record<string, number>;
+}
+
+export interface SweetNothingsTickState {
+  roundIndex: number;
+  totalRounds: number;
+  quote: string;
+  options: Array<{ characterId: string; characterName: string }>;
+  roundAnswered: boolean;
+  correctCharacterId: string | null;
+  scores: Record<string, number>;
+}
+
 // ── Dialogue ──
 
 export interface DialogueChoice {
